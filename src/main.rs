@@ -1,10 +1,4 @@
-mod data {
-    mod config;
-    mod provider;
-    mod sanitizer;
-    mod store;
-    mod types;
-}
+mod data;
 
 fn main() {
     // let cat = AssetCategory::by_str("um");
