@@ -2,7 +2,7 @@
 // use polars::prelude::PolarsError;
 
 use crate::data::config::DataConfig;
-use crate::data::types::AssetCategory;
+use crate::data::AssetCategory;
 
 pub struct DataStore {
     config: DataConfig,
