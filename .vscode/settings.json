@@ -1,0 +1,10 @@
+{
+  "editor.fontSize": 12,
+  "scm.inputFontSize": 12,
+  "debug.console.fontSize": 12,
+  "markdown.preview.fontSize": 12,
+  "terminal.integrated.fontSize": 12,
+  "chat.editor.fontSize": 12,
+  "rust-analyzer.linkedProjects": [".\\Cargo.toml"],
+  "rust-analyzer.diagnostics.warningsAsHint": ["dead_code", "unused_variables"]
+}
