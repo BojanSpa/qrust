@@ -1,0 +1,22 @@
+base_raw_dir = "D:\\quant\\data\\binance\\klines"
+base_store_dir = "E:\\quant\\store\\binance"
+
+spot_info_uri = "https://api.binance.com/api/v3/exchangeInfo"
+usdm_info_uri = "https://fapi.binance.com/fapi/v1/exchangeInfo"
+coinm_info_uri = "https://dapi.binance.com/dapi/v1/exchangeInfo"
+
+spot_klines_uri = "https://api.binance.com/api/v3/klines"
+usdm_klines_uri = "https://fapi.binance.com/fapi/v1/klines"
+coinm_klines_uri = "https://dapi.binance.com/dapi/v1/klines"
+
+spot_hist_klines_monthly_uri = "https://data.binance.vision/data/spot/monthly/klines"
+usdm_hist_klines_monthly_uri = "https://data.binance.vision/data/futures/um/monthly/klines"
+coinm_hist_klines_monthly_uri = "https://data.binance.vision/data/futures/cm/monthly/klines"
+
+spot_hist_klines_daily_uri = "https://data.binance.vision/data/spot/daily/klines"
+usdm_hist_klines_daily_uri = "https://data.binance.vision/data/futures/um/daily/klines"
+coinm_hist_klines_daily_uri = "https://data.binance.vision/data/futures/cm/daily/klines"
+
+download_file_format = "[[Symbol]]-[[Timeframe]]-[[Date]].zip"
+date_format_monthly = "%Y-%m"
+date_format_daily = "%Y-%m-%d"
