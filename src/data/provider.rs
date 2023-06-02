@@ -7,6 +7,7 @@ use std::path::PathBuf;
 
 use chrono::{DateTime, Datelike, Days, Duration, Months, Utc};
 use reqwest::Url;
+use url;
 use zip::ZipArchive;
 
 use crate::data::config::DataConfig;
@@ -157,11 +158,15 @@ impl DataProvider {
         }
     }
 
-    fn uri_for(&self, baseuri: &str, symbol: &str, filename: &str) -> Result<Url> {
-        Url::parse(baseuri)?
-            .join(symbol)?
-            .join(DEFAULT_TIMEFRAME)?
-            .join(filename)?
+    fn uri_for(&self, baseuri: &str, symbol: &str, filename: &str) -> url::Url {
+        Url::parse(baseuri)
+            .unwrap()
+            .join(symbol)
+            .unwrap()
+            .join(DEFAULT_TIMEFRAME)
+            .unwrap()
+            .join(filename)
+            .unwrap()
     }
 
     fn date_format_for(&self, timeperiod: &Timeperiod) -> String {
