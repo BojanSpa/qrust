@@ -1,19 +1,37 @@
-// use polars::frame::DataFrame;
-// use polars::prelude::PolarsError;
+use std::thread;
 
-// use crate::data::config::DataConfig;
-// use crate::data::AssetCategory;
+use crate::data::Symbol;
+use crate::AssetCategory;
+use crate::DataConfig;
+use crate::DataProvider;
 
-// pub struct DataStore {
-//     config: DataConfig,
-//     asset_cat: AssetCategory,
-// }
-// impl DataStore {
-//     pub fn new(config: DataConfig, asset_cat: AssetCategory) -> DataStore {
-//         DataStore { config, asset_cat }
-//     }
+pub struct DataStore {
+    config: DataConfig,
+    asset_cat: AssetCategory,
+    provider: DataProvider,
+}
+impl DataStore {
+    pub fn new(config: DataConfig, asset_cat: AssetCategory) -> DataStore {
+        let provider = DataProvider::new(config.clone(), asset_cat.clone());
 
-//     // pub fn load(&self, symbol: String, tf: Option<String>) -> Result<DataFrame, PolarsError> {
-//     //     DataFrame::new(vec![])
-//     // }
-// }
+        DataStore {
+            config,
+            asset_cat,
+            provider,
+        }
+    }
+
+    pub fn sync(&self, symbols: Vec<Symbol>) {
+        let mut threads = vec![];
+
+        for symbol in symbols {
+            threads.push(thread::spawn(move || {
+                Self::sync_internal(symbol);
+            }));
+        }
+
+        threads.into_iter().for_each(|t| t.join().unwrap());
+    }
+
+    fn sync_internal(symbol: Symbol) {}
+}

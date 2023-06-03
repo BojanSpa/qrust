@@ -1,8 +1,11 @@
+use chrono::{DateTime, Utc};
+
 pub mod config;
 pub mod provider;
 pub mod sanitizer;
 pub mod store;
 
+#[derive(Clone)]
 pub enum AssetCategory {
     Spot,
     Usdm,
@@ -25,4 +28,10 @@ impl AssetCategory {
             _ => panic!("Invalid asset category: {}", value),
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Symbol {
+    pub name: String,
+    pub initdate: DateTime<Utc>,
 }

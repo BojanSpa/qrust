@@ -3,7 +3,7 @@ use std::fs;
 
 use crate::data::AssetCategory;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone)]
 pub struct DataConfig {
     pub base_raw_dir: String,
     pub base_store_dir: String,

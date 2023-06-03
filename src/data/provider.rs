@@ -13,7 +13,7 @@ use zip::ZipArchive;
 
 use crate::data::config::DataConfig;
 use crate::data::sanitizer::CsvSanitizer;
-use crate::data::AssetCategory;
+use crate::data::{AssetCategory, Symbol};
 use crate::extensions::datetime;
 
 const DEFAULT_TIMEFRAME: &str = "1m";
@@ -31,12 +31,6 @@ impl Timeperiod {
             Timeperiod::Monthly => "monthly",
         }
     }
-}
-
-#[derive(Debug)]
-pub struct Symbol {
-    pub name: String,
-    pub initdate: DateTime<Utc>,
 }
 
 pub struct SymbolsProvider {
