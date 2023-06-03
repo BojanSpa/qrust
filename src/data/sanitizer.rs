@@ -60,9 +60,9 @@ impl CsvSanitizer {
     }
 }
 
-pub struct DataFrameSanitizer;
-impl DataFrameSanitizer {
-    pub fn new() -> DataFrameSanitizer {
-        DataFrameSanitizer {}
-    }
-}
+// pub struct DataFrameSanitizer;
+// impl DataFrameSanitizer {
+//     pub fn new() -> DataFrameSanitizer {
+//         DataFrameSanitizer {}
+//     }
+// }

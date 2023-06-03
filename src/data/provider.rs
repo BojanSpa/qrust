@@ -9,6 +9,7 @@ use anyhow::Result;
 use chrono::{DateTime, Datelike, Days, Duration, Months, NaiveDateTime, Utc};
 use reqwest::Url;
 use serde_json::Value as JsonValue;
+use url;
 use zip::ZipArchive;
 
 use crate::data::config::DataConfig;
@@ -96,18 +97,20 @@ impl DataProvider {
         }
     }
 
-    pub fn sync(&self, symbol: &str, init_date: &DateTime<Utc>) -> Result<(), IoError> {
-        self.sync_internal(symbol, init_date, Timeperiod::Monthly)?;
-        self.sync_internal(symbol, init_date, Timeperiod::Daily)?;
+    pub async fn sync(&self, symbol: &str, init_date: &DateTime<Utc>) -> Result<()> {
+        self.sync_internal(symbol, init_date, Timeperiod::Monthly)
+            .await?;
+        self.sync_internal(symbol, init_date, Timeperiod::Daily)
+            .await?;
         Ok(())
     }
 
-    fn sync_internal(
+    async fn sync_internal(
         &self,
         symbol: &str,
         init_date: &DateTime<Utc>,
         timeperiod: Timeperiod,
-    ) -> Result<(), IoError> {
+    ) -> Result<()> {
         let fromdate = self.fromdate_for(init_date, &timeperiod);
         let todate = Utc::now() - Duration::days(1);
         let dates = self.dates_for(&fromdate, &todate, &timeperiod);
@@ -118,7 +121,7 @@ impl DataProvider {
         }
 
         for date in dates {
-            self.fetch(symbol, &timeperiod, &date);
+            self.fetch(symbol, &timeperiod, &date).await;
         }
 
         Ok(())
@@ -137,7 +140,7 @@ impl DataProvider {
             return;
         }
 
-        let fileuri = self.uri_for(&baseuri, symbol, &zipname).unwrap();
+        let fileuri = self.uri_for(&baseuri, symbol, &zipname);
         let response = match reqwest::get(fileuri).await {
             Ok(response) => response,
             Err(_) => {
@@ -213,12 +216,15 @@ impl DataProvider {
         }
     }
 
-    fn uri_for(&self, baseuri: &str, symbol: &str, filename: &str) -> Result<Url, url::ParseError> {
-        let url = Url::parse(baseuri)?
-            .join(symbol)?
-            .join(DEFAULT_TIMEFRAME)?
-            .join(filename)?;
-        Ok(url)
+    fn uri_for(&self, baseuri: &str, symbol: &str, filename: &str) -> url::Url {
+        Url::parse(baseuri)
+            .unwrap()
+            .join(symbol)
+            .unwrap()
+            .join(DEFAULT_TIMEFRAME)
+            .unwrap()
+            .join(filename)
+            .unwrap()
     }
 
     fn date_format_for(&self, timeperiod: &Timeperiod) -> String {
