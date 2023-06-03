@@ -1,6 +1,8 @@
 use serde::Deserialize;
 use std::fs;
 
+use crate::data::AssetCategory;
+
 #[derive(Deserialize)]
 pub struct DataConfig {
     pub base_raw_dir: String,
@@ -31,5 +33,13 @@ impl DataConfig {
     pub fn new() -> DataConfig {
         let content = fs::read_to_string("Config.toml").unwrap();
         toml::from_str(&content).unwrap()
+    }
+
+    pub fn info_uri_for(&self, asset_cat: &AssetCategory) -> &str {
+        match asset_cat {
+            AssetCategory::Spot => &self.spot_info_uri,
+            AssetCategory::Usdm => &self.usdm_info_uri,
+            AssetCategory::Coinm => &self.coinm_info_uri,
+        }
     }
 }

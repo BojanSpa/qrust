@@ -5,8 +5,10 @@ use std::io::Error as IoError;
 use std::io::Write;
 use std::path::PathBuf;
 
-use chrono::{DateTime, Datelike, Days, Duration, Months, Utc};
+use anyhow::Result;
+use chrono::{DateTime, Datelike, Days, Duration, Months, NaiveDateTime, Utc};
 use reqwest::Url;
+use serde_json::Value as JsonValue;
 use zip::ZipArchive;
 
 use crate::data::config::DataConfig;
@@ -20,6 +22,63 @@ const DEFAULT_TIMEFRAME: &str = "1m";
 pub enum Timeperiod {
     Monthly,
     Daily,
+}
+
+#[derive(Debug)]
+pub struct Symbol {
+    pub name: String,
+    pub initdate: DateTime<Utc>,
+}
+
+pub struct SymbolsProvider {
+    config: DataConfig,
+    asset_cat: AssetCategory,
+}
+
+impl SymbolsProvider {
+    const KEY_INITDATE: &'static str = "onboardDate";
+
+    pub fn new(config: DataConfig, asset_cat: AssetCategory) -> SymbolsProvider {
+        SymbolsProvider { config, asset_cat }
+    }
+
+    pub async fn get(&self) -> Result<()> {
+        let uri = self.config.info_uri_for(&self.asset_cat);
+        let response = reqwest::get(uri).await?;
+        let json: JsonValue = response.json().await?;
+
+        let symbols: Vec<Symbol> = json["symbols"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|item| Symbol {
+                name: item["symbol"].as_str().unwrap().to_string(),
+                initdate: self.initdate_for(item),
+            })
+            .collect();
+
+        println!("Response: {:?}", symbols);
+        Ok(())
+    }
+
+    fn initdate_for(&self, json: &JsonValue) -> DateTime<Utc> {
+        if let Some(initdate) = json.get(Self::KEY_INITDATE) {
+            let mut timestamp = initdate.as_i64().unwrap();
+            if timestamp.to_string().len() <= 10 {
+                timestamp *= 1000;
+            }
+            DateTime::from_utc(
+                NaiveDateTime::from_timestamp_millis(timestamp).unwrap(),
+                Utc,
+            )
+        } else {
+            self.DEFAULT_INITDATE()
+        }
+    }
+
+    fn DEFAULT_INITDATE(&self) -> DateTime<Utc> {
+        datetime::create_utc(2017, 1, 1)
+    }
 }
 
 pub struct DataProvider {
@@ -58,14 +117,14 @@ impl DataProvider {
             std::fs::create_dir_all(base_path)?;
         }
 
-        dates
-            .iter()
-            .for_each(|date| self.fetch(symbol, &timeperiod, date));
+        for date in dates {
+            self.fetch(symbol, &timeperiod, &date);
+        }
 
         Ok(())
     }
 
-    fn fetch(&self, symbol: &str, timeperiod: &Timeperiod, date: &DateTime<Utc>) {
+    async fn fetch(&self, symbol: &str, timeperiod: &Timeperiod, date: &DateTime<Utc>) {
         let basepath = self.base_path_for(symbol);
         let baseuri = self.base_uri_for(timeperiod);
         let dateformat = self.date_format_for(timeperiod);
@@ -78,8 +137,8 @@ impl DataProvider {
             return;
         }
 
-        let fileuri = self.uri_for(&baseuri, symbol, &zipname);
-        let response = match reqwest::blocking::get(fileuri) {
+        let fileuri = self.uri_for(&baseuri, symbol, &zipname).unwrap();
+        let response = match reqwest::get(fileuri).await {
             Ok(response) => response,
             Err(_) => {
                 warn!("Could not fetch {}", zipname);
@@ -87,7 +146,7 @@ impl DataProvider {
             }
         };
 
-        let content = match response.bytes() {
+        let content = match response.bytes().await {
             Ok(bytes) => bytes,
             Err(_) => {
                 error!("Could not get content for {}", zipname);
@@ -119,10 +178,7 @@ impl DataProvider {
             return;
         }
 
-        if fs::remove_file(&zippath).is_err() {
-            debug!("Could not remove {}", &zipname);
-            return;
-        };
+        fs::remove_file(&zippath).unwrap();
 
         info!("Fetched {}", &zipname);
     }
@@ -157,11 +213,12 @@ impl DataProvider {
         }
     }
 
-    fn uri_for(&self, baseuri: &str, symbol: &str, filename: &str) -> Result<Url> {
-        Url::parse(baseuri)?
+    fn uri_for(&self, baseuri: &str, symbol: &str, filename: &str) -> Result<Url, url::ParseError> {
+        let url = Url::parse(baseuri)?
             .join(symbol)?
             .join(DEFAULT_TIMEFRAME)?
-            .join(filename)?
+            .join(filename)?;
+        Ok(url)
     }
 
     fn date_format_for(&self, timeperiod: &Timeperiod) -> String {
@@ -226,7 +283,7 @@ mod tests {
 
     #[test]
     fn test_monthly_dates_for() {
-        let provider = get_provider();
+        let provider = create_provider();
         let fromdate = datetime::create_utc(2021, 10, 10);
         let todate = datetime::create_utc(2022, 2, 20);
         let dates = provider.dates_for(&fromdate, &todate, &Timeperiod::Monthly);
@@ -241,7 +298,7 @@ mod tests {
 
     #[test]
     fn test_daily_dates_for() {
-        let provider = get_provider();
+        let provider = create_provider();
         let fromdate = datetime::create_utc(2023, 4, 29);
         let todate = datetime::create_utc(2023, 5, 2);
         let dates = provider.dates_for(&fromdate, &todate, &Timeperiod::Daily);
@@ -255,7 +312,7 @@ mod tests {
 
     #[test]
     fn test_monthly_file_name_for() {
-        let provider = get_provider();
+        let provider = create_provider();
         let date = datetime::create_utc(2023, 4, 1);
         let file_name = provider.file_name_for("btcusdt", &date, "%Y-%m");
         assert_eq!("BTCUSDT-1m-2023-04.zip", file_name);
@@ -263,13 +320,13 @@ mod tests {
 
     #[test]
     fn test_daily_file_name_for() {
-        let provider = get_provider();
+        let provider = create_provider();
         let date = datetime::create_utc(2023, 4, 4);
         let file_name = provider.file_name_for("btcusdt", &date, "%Y-%m-%d");
         assert_eq!("BTCUSDT-1m-2023-04-04.zip", file_name);
     }
 
-    fn get_provider() -> DataProvider {
+    fn create_provider() -> DataProvider {
         let config = DataConfig::new();
         DataProvider::new(config, AssetCategory::Spot)
     }

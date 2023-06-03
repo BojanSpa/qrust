@@ -7,16 +7,28 @@ use env_logger::Builder as LogBuilder;
 use env_logger::Target as LogTarget;
 
 use data::config::DataConfig;
-use data::provider::DataProvider;
+use data::provider::{DataProvider, SymbolsProvider};
 use data::AssetCategory;
 use extensions::datetime;
 
 mod data;
 mod extensions;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     setup_logger();
 
+    all_symbols().await;
+    // sync_test();
+}
+
+async fn all_symbols() {
+    let config = DataConfig::new();
+    let provider = SymbolsProvider::new(config, AssetCategory::Usdm);
+    provider.get().await.unwrap();
+}
+
+fn sync_test() {
     let config = DataConfig::new();
     let provider = DataProvider::new(config, AssetCategory::Usdm);
     let sync_result = provider.sync("BNBBUSD", &datetime::create_utc(2020, 1, 1));
