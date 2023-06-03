@@ -42,4 +42,20 @@ impl DataConfig {
             AssetCategory::Coinm => &self.coinm_info_uri,
         }
     }
+
+    pub fn daily_hist_klines_uri_for(&self, asset_cat: &AssetCategory) -> &str {
+        match asset_cat {
+            AssetCategory::Spot => &self.spot_hist_klines_daily_uri,
+            AssetCategory::Usdm => &self.usdm_hist_klines_daily_uri,
+            AssetCategory::Coinm => &self.coinm_hist_klines_daily_uri,
+        }
+    }
+
+    pub fn monthly_hist_klines_uri_for(&self, asset_cat: &AssetCategory) -> &str {
+        match asset_cat {
+            AssetCategory::Spot => &self.spot_hist_klines_monthly_uri,
+            AssetCategory::Usdm => &self.usdm_hist_klines_monthly_uri,
+            AssetCategory::Coinm => &self.coinm_hist_klines_monthly_uri,
+        }
+    }
 }

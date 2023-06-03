@@ -18,8 +18,8 @@ mod extensions;
 async fn main() {
     setup_logger();
 
-    all_symbols().await;
-    // sync_test();
+    // all_symbols().await;
+    sync_test().await;
 }
 
 async fn all_symbols() {
@@ -28,10 +28,12 @@ async fn all_symbols() {
     provider.get().await.unwrap();
 }
 
-fn sync_test() {
+async fn sync_test() {
     let config = DataConfig::new();
     let provider = DataProvider::new(config, AssetCategory::Usdm);
-    let sync_result = provider.sync("BNBBUSD", &datetime::create_utc(2020, 1, 1));
+    let sync_result = provider
+        .sync("BNBBUSD", &datetime::create_utc(2020, 1, 1))
+        .await;
     match sync_result {
         Ok(_) => info!("Sync completed successfully"),
         Err(e) => error!("Sync failed: {}", e),

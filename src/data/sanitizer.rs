@@ -13,28 +13,32 @@ impl CsvSanitizer {
         CsvSanitizer {}
     }
 
-    pub fn cleanup(&self, csv_path: &Path) -> Result<(), IoError> {
-        if !self.is_csv(csv_path) {
+    pub fn cleanup(&self, csvpath: &Path) -> Result<(), IoError> {
+        if !self.is_csv(csvpath) {
             return Err(IoError::new(ErrorKind::InvalidInput, "Not a CSV file."));
         }
 
-        let reader = CsvReader::from_path(csv_path)?;
-        if reader.has_headers() {
-            return Ok(());
-        }
-
-        let content_record_results = reader.into_records().collect::<Vec<_>>();
-        if content_record_results.iter().any(|rec| rec.is_err()) {
-            return Err(IoError::new(ErrorKind::InvalidData, "Invalid CSV data."));
-        }
-
-        let mut content_records = content_record_results
-            .into_iter()
+        let mut content_records = CsvReader::from_path(csvpath)?
+            .into_records()
             .map(|rec| rec.unwrap())
             .collect::<Vec<CsvStringRecord>>();
-        content_records.insert(0, self.get_header_record());
 
-        let csv_file = OpenOptions::new().read(true).write(true).open(csv_path)?;
+        let first_record = match content_records.first() {
+            Some(rec) => rec,
+            None => {
+                log::warn!("CSV file is empty.");
+                return Ok(());
+            }
+        };
+
+        let header_record = self.get_header_record();
+        if first_record == &header_record {
+            return Ok(());
+        };
+
+        content_records.insert(0, header_record);
+
+        let csv_file = OpenOptions::new().read(true).write(true).open(csvpath)?;
         let mut writer = CsvWriter::from_writer(csv_file);
         for record in content_records {
             writer.write_record(&record)?;
@@ -45,8 +49,7 @@ impl CsvSanitizer {
     }
 
     fn is_csv(&self, path: &Path) -> bool {
-        const CSV_EXT: &str = ".csv";
-
+        const CSV_EXT: &str = "csv";
         return match path.extension() {
             Some(ext) => ext == CSV_EXT,
             None => false,

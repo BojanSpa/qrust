@@ -1,7 +1,6 @@
 use log::{debug, error, info, warn};
 use std::fs;
 use std::fs::File;
-use std::io::Error as IoError;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -21,8 +20,17 @@ const DEFAULT_TIMEFRAME: &str = "1m";
 
 #[derive(PartialEq)]
 pub enum Timeperiod {
-    Monthly,
     Daily,
+    Monthly,
+}
+
+impl Timeperiod {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Timeperiod::Daily => "daily",
+            Timeperiod::Monthly => "monthly",
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -100,8 +108,12 @@ impl DataProvider {
     pub async fn sync(&self, symbol: &str, init_date: &DateTime<Utc>) -> Result<()> {
         self.sync_internal(symbol, init_date, Timeperiod::Monthly)
             .await?;
-        self.sync_internal(symbol, init_date, Timeperiod::Daily)
-            .await?;
+
+        // let now = Utc::now();
+        // let initdate = datetime::create_utc(now.year(), now.month(), 1);
+        // self.sync_internal(symbol, &initdate, Timeperiod::Daily)
+        //     .await?;
+
         Ok(())
     }
 
@@ -115,20 +127,28 @@ impl DataProvider {
         let todate = Utc::now() - Duration::days(1);
         let dates = self.dates_for(&fromdate, &todate, &timeperiod);
 
-        let base_path = self.base_path_for(symbol);
+        let base_path = self.base_path_for(symbol, &timeperiod);
         if !base_path.exists() {
             std::fs::create_dir_all(base_path)?;
         }
 
         for date in dates {
-            self.fetch(symbol, &timeperiod, &date).await;
+            if let Err(e) = self.fetch(symbol, &timeperiod, &date).await {
+                error!("Error fetching data for {}", symbol);
+                debug!("Error: {}", e);
+            }
         }
 
         Ok(())
     }
 
-    async fn fetch(&self, symbol: &str, timeperiod: &Timeperiod, date: &DateTime<Utc>) {
-        let basepath = self.base_path_for(symbol);
+    async fn fetch(
+        &self,
+        symbol: &str,
+        timeperiod: &Timeperiod,
+        date: &DateTime<Utc>,
+    ) -> Result<()> {
+        let basepath = self.base_path_for(symbol, timeperiod);
         let baseuri = self.base_uri_for(timeperiod);
         let dateformat = self.date_format_for(timeperiod);
         let zipname = self.file_name_for(symbol, date, &dateformat);
@@ -137,56 +157,41 @@ impl DataProvider {
         let csvpath = basepath.join(&csvname);
         if csvpath.exists() {
             debug!("{} already exists", csvpath.to_str().unwrap());
-            return;
+            return Ok(());
         }
 
-        let fileuri = self.uri_for(&baseuri, symbol, &zipname);
-        let response = match reqwest::get(fileuri).await {
-            Ok(response) => response,
-            Err(_) => {
-                warn!("Could not fetch {}", zipname);
-                return;
-            }
-        };
+        let fileuri = self.uri_for(baseuri, symbol, &zipname).to_string();
+        let response = reqwest::get(fileuri).await.map_err(|e| {
+            error!("Could not get content for {}", zipname);
+            e
+        })?;
 
-        let content = match response.bytes().await {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                error!("Could not get content for {}", zipname);
-                return;
-            }
-        };
+        let status = response.status();
+        if !status.is_success() {
+            warn!("Could not fetch {}", zipname);
+            return Ok(());
+        }
 
+        let content = response.bytes().await?;
         let zippath = basepath.join(&zipname);
-        let mut zipfile = match File::create(&zippath) {
-            Ok(file) => file,
-            Err(_) => {
-                error!("Could not create {}", zipname);
-                return;
-            }
-        };
 
-        if zipfile.write_all(&content).is_err() {
-            error!("Could not write content to {}", zipname);
-            return;
-        }
-
-        if self.extract(&zipfile, &basepath).is_err() {
-            error!("Could not extract {}", zipname);
-            return;
-        }
-
-        if self.sanitizer.cleanup(&csvpath).is_err() {
-            warn!("Could not sanitize {}", &csvname);
-            return;
-        }
-
-        fs::remove_file(&zippath).unwrap();
+        self.create_zipfile(&zippath, &content)?;
+        self.extract_zipfile(&zippath, &basepath)?;
+        self.sanitizer.cleanup(&csvpath)?;
+        fs::remove_file(&zippath)?;
 
         info!("Fetched {}", &zipname);
+        Ok(())
     }
 
-    fn extract(&self, zipfile: &File, basepath: &PathBuf) -> Result<(), IoError> {
+    fn create_zipfile(&self, zippath: &PathBuf, content: &bytes::Bytes) -> Result<()> {
+        let mut zipfile = File::create(zippath)?;
+        zipfile.write_all(content)?;
+        Ok(())
+    }
+
+    fn extract_zipfile(&self, zippath: &PathBuf, basepath: &PathBuf) -> Result<()> {
+        let zipfile = File::open(zippath)?;
         let mut archive = ZipArchive::new(zipfile)?;
         archive.extract(basepath)?;
         Ok(())
@@ -201,27 +206,29 @@ impl DataProvider {
 
     // }
 
-    fn base_path_for(&self, symbol: &str) -> PathBuf {
+    fn base_path_for(&self, symbol: &str, timeperiod: &Timeperiod) -> PathBuf {
         let mut path_buf = PathBuf::new();
         path_buf.push(self.config.base_raw_dir.as_str());
-        path_buf.push(self.asset_cat.to_str());
+        path_buf.push(self.asset_cat.as_str());
+        path_buf.push(timeperiod.as_str());
         path_buf.push(symbol.to_uppercase());
         path_buf
     }
 
-    fn base_uri_for(&self, timeperiod: &Timeperiod) -> String {
+    fn base_uri_for(&self, timeperiod: &Timeperiod) -> &str {
         match timeperiod {
-            Timeperiod::Monthly => self.config.spot_hist_klines_monthly_uri.clone(),
-            Timeperiod::Daily => self.config.spot_hist_klines_daily_uri.clone(),
+            Timeperiod::Monthly => self.config.monthly_hist_klines_uri_for(&self.asset_cat),
+            Timeperiod::Daily => self.config.daily_hist_klines_uri_for(&self.asset_cat),
         }
     }
 
     fn uri_for(&self, baseuri: &str, symbol: &str, filename: &str) -> url::Url {
+        const SLASH: &str = "/";
         Url::parse(baseuri)
             .unwrap()
-            .join(symbol)
+            .join(&format!("{}{}", symbol, SLASH))
             .unwrap()
-            .join(DEFAULT_TIMEFRAME)
+            .join(&format!("{}{}", DEFAULT_TIMEFRAME, SLASH))
             .unwrap()
             .join(filename)
             .unwrap()
@@ -262,7 +269,7 @@ impl DataProvider {
                 let years = todate.year() - fromdate.year();
                 let from_month = fromdate.month() as i32;
                 let to_month = todate.month() as i32;
-                let months = (years * 12) + (to_month - from_month);
+                let months = (years * 12) + (to_month - from_month) - 1;
 
                 for months_to_add in 0..=months {
                     dates.push(

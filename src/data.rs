@@ -9,7 +9,7 @@ pub enum AssetCategory {
     Coinm,
 }
 impl AssetCategory {
-    pub fn to_str(&self) -> &'static str {
+    pub fn as_str(&self) -> &'static str {
         match self {
             AssetCategory::Spot => "spot",
             AssetCategory::Usdm => "um",
@@ -17,12 +17,12 @@ impl AssetCategory {
         }
     }
 
-    pub fn by_str(category: &str) -> AssetCategory {
-        match category {
+    pub fn as_value(value: &str) -> AssetCategory {
+        match value {
             "spot" => AssetCategory::Spot,
             "um" => AssetCategory::Usdm,
             "cm" => AssetCategory::Coinm,
-            _ => panic!("Invalid asset category: {}", category),
+            _ => panic!("Invalid asset category: {}", value),
         }
     }
 }
