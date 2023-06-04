@@ -1,15 +1,16 @@
 use log::{debug, error, info, warn};
 use std::fs;
-use std::fs::File;
+use std::fs::{read_dir, File};
 use std::io::Write;
 use std::path::PathBuf;
 
+use ::zip::ZipArchive;
 use anyhow::Result;
 use chrono::{DateTime, Datelike, Days, Duration, Months, NaiveDateTime, Utc};
+use polars::prelude::*;
 use reqwest::Url;
 use serde_json::Value as JsonValue;
 use url;
-use zip::ZipArchive;
 
 use crate::data::config::DataConfig;
 use crate::data::sanitizer::CsvSanitizer;
@@ -45,8 +46,8 @@ impl SymbolsProvider {
         SymbolsProvider { config, asset_cat }
     }
 
-    pub async fn get(&self) -> Result<()> {
-        let uri = self.config.info_uri_for(&self.asset_cat);
+    pub async fn get(&self) -> Result<Vec<Symbol>> {
+        let uri = &self.config.info_uri;
         let response = reqwest::get(uri).await?;
         let json: JsonValue = response.json().await?;
 
@@ -60,8 +61,7 @@ impl SymbolsProvider {
             })
             .collect();
 
-        println!("Response: {:?}", symbols);
-        Ok(())
+        Ok(symbols)
     }
 
     fn initdate_for(&self, json: &JsonValue) -> DateTime<Utc> {
@@ -99,19 +99,17 @@ impl DataProvider {
         }
     }
 
-    pub async fn sync(&self, symbol: &str, init_date: &DateTime<Utc>) -> Result<()> {
-        self.sync_internal(symbol, init_date, Timeperiod::Monthly)
-            .await?;
+    pub fn sync(&self, symbol: &str, init_date: &DateTime<Utc>) -> Result<()> {
+        self.sync_internal(symbol, init_date, Timeperiod::Monthly)?;
 
-        // let now = Utc::now();
-        // let initdate = datetime::create_utc(now.year(), now.month(), 1);
-        // self.sync_internal(symbol, &initdate, Timeperiod::Daily)
-        //     .await?;
+        let now = Utc::now();
+        let initdate = datetime::create_utc(now.year(), now.month(), 1);
+        self.sync_internal(symbol, &initdate, Timeperiod::Daily)?;
 
         Ok(())
     }
 
-    async fn sync_internal(
+    fn sync_internal(
         &self,
         symbol: &str,
         init_date: &DateTime<Utc>,
@@ -127,7 +125,7 @@ impl DataProvider {
         }
 
         for date in dates {
-            if let Err(e) = self.fetch(symbol, &timeperiod, &date).await {
+            if let Err(e) = self.fetch(symbol, &timeperiod, &date) {
                 error!("Error fetching data for {}", symbol);
                 debug!("Error: {}", e);
             }
@@ -136,13 +134,8 @@ impl DataProvider {
         Ok(())
     }
 
-    async fn fetch(
-        &self,
-        symbol: &str,
-        timeperiod: &Timeperiod,
-        date: &DateTime<Utc>,
-    ) -> Result<()> {
-        let basepath = self.base_path_for(symbol, timeperiod);
+    fn fetch(&self, symbol: &str, timeperiod: &Timeperiod, date: &DateTime<Utc>) -> Result<()> {
+        let basepath = self.base_path_for(symbol, &timeperiod);
         let baseuri = self.base_uri_for(timeperiod);
         let dateformat = self.date_format_for(timeperiod);
         let zipname = self.file_name_for(symbol, date, &dateformat);
@@ -155,7 +148,7 @@ impl DataProvider {
         }
 
         let fileuri = self.uri_for(baseuri, symbol, &zipname).to_string();
-        let response = reqwest::get(fileuri).await.map_err(|e| {
+        let response = reqwest::blocking::get(fileuri).map_err(|e| {
             error!("Could not get content for {}", zipname);
             e
         })?;
@@ -166,7 +159,7 @@ impl DataProvider {
             return Ok(());
         }
 
-        let content = response.bytes().await?;
+        let content = response.bytes()?;
         let zippath = basepath.join(&zipname);
 
         self.create_zipfile(&zippath, &content)?;
@@ -191,28 +184,53 @@ impl DataProvider {
         Ok(())
     }
 
-    // pub fn load(&self, symbol: &str) -> Result<DataFrame, PolarsError> {
-    //     let base_path = self.base_path_for(symbol);
+    pub fn load_all(&self, symbol: &str) -> Vec<DataFrame> {
+        let mut monthly_dfs = self.load(symbol, &Timeperiod::Monthly);
+        let mut daily_dfs = self.load(symbol, &Timeperiod::Daily);
+        let mut dfs = Vec::new();
+        dfs.append(&mut monthly_dfs);
+        dfs.append(&mut daily_dfs);
+        dfs
+    }
 
-    //     if !base_path.exists() {
-    //         return Err(PolarsError::NotFound);
-    //     }
+    fn load(&self, symbol: &str, timeperiod: &Timeperiod) -> Vec<DataFrame> {
+        let path = self.base_path_for(symbol, timeperiod);
+        let entries = match read_dir(path) {
+            Ok(files) => files,
+            Err(_) => return Vec::new(),
+        };
 
-    // }
+        let mut dfs = Vec::new();
+        for entry in entries {
+            let path = entry.unwrap().path();
+            if path.extension().unwrap() != "csv" {
+                continue;
+            }
+
+            let df = CsvReader::from_path(&path).unwrap().finish();
+            if df.is_err() {
+                error!("Could not load csv file {}", path.to_str().unwrap());
+                return dfs;
+            }
+
+            dfs.push(df.unwrap());
+        }
+        dfs
+    }
 
     fn base_path_for(&self, symbol: &str, timeperiod: &Timeperiod) -> PathBuf {
-        let mut path_buf = PathBuf::new();
-        path_buf.push(self.config.base_raw_dir.as_str());
-        path_buf.push(self.asset_cat.as_str());
-        path_buf.push(timeperiod.as_str());
-        path_buf.push(symbol.to_uppercase());
-        path_buf
+        let mut base_path = PathBuf::new();
+        base_path.push(&self.config.base_raw_dir);
+        base_path.push(self.asset_cat.as_str());
+        base_path.push(timeperiod.as_str());
+        base_path.push(symbol.to_uppercase());
+        base_path
     }
 
     fn base_uri_for(&self, timeperiod: &Timeperiod) -> &str {
         match timeperiod {
-            Timeperiod::Monthly => self.config.monthly_hist_klines_uri_for(&self.asset_cat),
-            Timeperiod::Daily => self.config.daily_hist_klines_uri_for(&self.asset_cat),
+            Timeperiod::Monthly => &self.config.hist_klines_monthly_uri,
+            Timeperiod::Daily => &self.config.hist_klines_daily_uri,
         }
     }
 
@@ -228,19 +246,19 @@ impl DataProvider {
             .unwrap()
     }
 
-    fn date_format_for(&self, timeperiod: &Timeperiod) -> String {
+    fn date_format_for(&self, timeperiod: &Timeperiod) -> &str {
         match timeperiod {
-            Timeperiod::Monthly => self.config.date_format_monthly.clone(),
-            Timeperiod::Daily => self.config.date_format_daily.clone(),
+            Timeperiod::Monthly => &self.config.date_format_monthly,
+            Timeperiod::Daily => &self.config.date_format_daily,
         }
     }
 
     fn file_name_for(&self, symbol: &str, date: &DateTime<Utc>, dateformat: &str) -> String {
-        let mut filename = self.config.download_file_format.clone();
+        let mut filename = self.config.download_file_format.to_string();
         filename = filename.replace("[[Symbol]]", &symbol.to_uppercase());
         filename = filename.replace("[[Timeframe]]", "1m");
         filename = filename.replace("[[Date]]", &date.format(dateformat).to_string());
-        filename
+        filename.to_string()
     }
 
     fn fromdate_for(&self, init_date: &DateTime<Utc>, timeperiod: &Timeperiod) -> DateTime<Utc> {
@@ -334,7 +352,7 @@ mod tests {
     }
 
     fn create_provider() -> DataProvider {
-        let config = DataConfig::new();
+        let config = DataConfig::new(AssetCategory::Spot);
         DataProvider::new(config, AssetCategory::Spot)
     }
 }
