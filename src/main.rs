@@ -36,13 +36,13 @@ async fn all_symbols() {
 async fn sync_test() {
     let config = DataConfig::new(AssetCategory::Usdm);
 
-    let symbols_provider = SymbolsProvider::new(config.clone(), AssetCategory::Usdm);
-    let symbols = symbols_provider.get().await.unwrap();
+    // let symbols_provider = SymbolsProvider::new(config.clone(), AssetCategory::Usdm);
+    // let symbols = symbols_provider.get().await.unwrap();
 
-    // let symbols = vec![Symbol {
-    //     name: "BTCUSDT".to_string(),
-    //     initdate: datetime::create_utc(2020, 1, 1),
-    // }];
+    let symbols = vec![Symbol {
+        name: "BTCUSDT".to_string(),
+        initdate: datetime::create_utc(2020, 1, 1),
+    }];
     let sync_task = tokio::task::spawn_blocking(move || {
         let data_store = DataStore::new_arc(config.clone(), AssetCategory::Usdm);
         data_store.sync(symbols);

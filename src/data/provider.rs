@@ -135,13 +135,13 @@ impl DataProvider {
     }
 
     fn fetch(&self, symbol: &str, timeperiod: &Timeperiod, date: &DateTime<Utc>) -> Result<()> {
-        let basepath = self.base_path_for(symbol, &timeperiod);
+        let basepath = self.base_path_for(symbol, timeperiod);
         let baseuri = self.base_uri_for(timeperiod);
         let dateformat = self.date_format_for(timeperiod);
-        let zipname = self.file_name_for(symbol, date, &dateformat);
+        let zipname = self.file_name_for(symbol, date, dateformat);
         let csvname = zipname.replace(".zip", ".csv");
 
-        let csvpath = basepath.join(&csvname);
+        let csvpath = basepath.join(csvname);
         if csvpath.exists() {
             debug!("{} already exists", csvpath.to_str().unwrap());
             return Ok(());
@@ -164,7 +164,7 @@ impl DataProvider {
 
         self.create_zipfile(&zippath, &content)?;
         self.extract_zipfile(&zippath, &basepath)?;
-        self.sanitizer.cleanup(&csvpath)?;
+        self.sanitizer.run(&csvpath)?;
         fs::remove_file(&zippath)?;
 
         info!("Fetched {}", &zipname);
@@ -258,7 +258,7 @@ impl DataProvider {
         filename = filename.replace("[[Symbol]]", &symbol.to_uppercase());
         filename = filename.replace("[[Timeframe]]", "1m");
         filename = filename.replace("[[Date]]", &date.format(dateformat).to_string());
-        filename.to_string()
+        filename
     }
 
     fn fromdate_for(&self, init_date: &DateTime<Utc>, timeperiod: &Timeperiod) -> DateTime<Utc> {

@@ -77,12 +77,12 @@ impl DataStore {
                 let provider = DataProvider::new(self.config.clone(), self.asset_cat.clone());
                 provider.sync(&symbol.name, &symbol.initdate)?;
 
-                // let dfs = provider.load_all(&symbol.name);
-                // if dfs.is_empty() {
-                //     return Err(anyhow!("No data found for symbol: {}", symbol.name));
-                // }
+                let dfs = provider.load_all(&symbol.name);
+                if dfs.is_empty() {
+                    return Err(anyhow!("No data found for symbol: {}", symbol.name));
+                }
 
-                // let store = self.create(&symbol.name, dfs);
+                let store = self.create(&symbol.name, dfs);
 
                 // store.unique_stable()
             }
