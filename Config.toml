@@ -20,3 +20,5 @@ coinm_hist_klines_daily_uri = "https://data.binance.vision/data/futures/cm/daily
 download_file_format = "[[Symbol]]-[[Timeframe]]-[[Date]].zip"
 date_format_monthly = "%Y-%m"
 date_format_daily = "%Y-%m-%d"
+
+default_timeframes = ["5min", "15min", "30min", "1h", "4h", "1d"]

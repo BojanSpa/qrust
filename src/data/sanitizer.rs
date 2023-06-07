@@ -7,6 +7,9 @@ use anyhow::{anyhow, Result};
 use csv::Reader as CsvReader;
 use csv::StringRecord as CsvStringRecord;
 use csv::Writer as CsvWriter;
+use polars::prelude::*;
+
+use crate::extensions::datetime;
 
 pub struct CsvSanitizer;
 impl CsvSanitizer {
@@ -88,9 +91,28 @@ impl CsvSanitizer {
     }
 }
 
-// pub struct DataFrameSanitizer;
-// impl DataFrameSanitizer {
-//     pub fn new() -> DataFrameSanitizer {
-//         DataFrameSanitizer {}
-//     }
-// }
+pub struct DataFrameSanitizer;
+
+impl DataFrameSanitizer {
+    pub fn new() -> DataFrameSanitizer {
+        DataFrameSanitizer {}
+    }
+
+    pub fn run(&self, df: &mut DataFrame) -> Result<()> {
+        let open_time_ts_series = df.column("open_time")?;
+        let open_time_dt_data = open_time_ts_series
+            .i64()?
+            .into_iter()
+            .map(|ts| datetime::from_timestamp(&ts.unwrap()))
+            .collect::<Vec<_>>();
+        let open_time_dt_series = Series::new("open_time", open_time_dt_data);
+
+        if open_time_dt_series.len() != df.height() {
+            return Err(anyhow!("Invalid open_time column."));
+        }
+
+        df.replace("open_time", open_time_dt_series)?;
+
+        Ok(())
+    }
+}

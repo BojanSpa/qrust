@@ -1,4 +1,3 @@
-use log::{info, warn};
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -27,7 +26,7 @@ impl DataStore {
     pub fn load(&self, symbol: &str, timeframe: &Option<String>) -> Option<DataFrame> {
         let store_path = self.store_path_for(symbol, timeframe);
         if !store_path.exists() {
-            warn!("Store file not found: {:?}", store_path);
+            log::warn!("Store file not found: {:?}", store_path);
             return None;
         }
 
@@ -40,6 +39,13 @@ impl DataStore {
         let store_name = self.store_name_for(symbol, timeframe);
         let mut store_path = PathBuf::new();
         store_path.push(&self.config.base_store_dir);
+        store_path.push(self.asset_cat.as_str());
+        store_path.push(symbol);
+
+        if !store_path.exists() {
+            std::fs::create_dir_all(&store_path).unwrap();
+        }
+
         store_path.push(store_name);
         store_path
     }
@@ -63,26 +69,29 @@ impl DataStore {
 
         symbols.into_par_iter().for_each(|symbol| {
             let this = Arc::clone(&self);
-            this.sync_internal(symbol);
+
+            match this.sync_internal(&symbol) {
+                Ok(_) => log::info!("Synced: {}", symbol.name),
+                Err(e) => {
+                    log::error!("Failed to sync: {}", symbol.name);
+                    log::debug!("Error: {}", e);
+                }
+            };
         });
     }
 
-    fn sync_internal(self: &Arc<Self>, symbol: Symbol) -> Result<()> {
-        let df = self.load(&symbol.name, &None);
-        match df {
-            Some(df) => {
+    fn sync_internal(self: &Arc<Self>, symbol: &Symbol) -> Result<()> {
+        let store = self.load(&symbol.name, &None);
+        match store {
+            Some(store) => {
                 // TODO: Check if df is up to date
+                print!("{}", store.sample_n(50, false, false, None).unwrap());
             }
             None => {
                 let provider = DataProvider::new(self.config.clone(), self.asset_cat.clone());
-                provider.sync(&symbol.name, &symbol.initdate)?;
+                // provider.sync(&symbol.name, &symbol.initdate)?;
 
-                let dfs = provider.load_all(&symbol.name);
-                if dfs.is_empty() {
-                    return Err(anyhow!("No data found for symbol: {}", symbol.name));
-                }
-
-                let store = self.create(&symbol.name, dfs);
+                let store = self.create(&provider, &symbol.name)?;
 
                 // store.unique_stable()
             }
@@ -91,13 +100,61 @@ impl DataStore {
         Ok(())
     }
 
-    fn create(self: &Arc<Self>, symbol: &str, mut dfs: Vec<DataFrame>) -> Option<DataFrame> {
-        let store = dfs.pop().unwrap();
-        for df in dfs {
-            store.vstack(&df).ok()?;
+    fn create(self: &Arc<Self>, provider: &DataProvider, symbol: &str) -> Result<DataFrame> {
+        let mut dfs = provider.load_all(symbol)?;
+        if dfs.is_empty() {
+            return Err(anyhow!("No data found for symbol: {}", symbol));
         }
-        print!("{}", store.sample_n(50, false, false, None).unwrap());
 
-        None
+        let mut store = dfs.pop().unwrap();
+        for df in dfs {
+            store = store.vstack(&df)?;
+        }
+
+        // TODO: Check for gaps in data
+        // Sometimes monthly data has daily gaps, so we need to fill them from daily data
+
+        store.calc_returns()?;
+        store.calc_cum_returns()?;
+
+        println!("Rows: {}", store.height());
+
+        let store_path = self.store_path_for(symbol, &None);
+        let mut store_file = File::create(store_path)?;
+        ParquetWriter::new(&mut store_file).finish(&mut store)?;
+
+        Ok(store)
+    }
+}
+
+trait StoreCalcs {
+    fn calc_returns(&mut self) -> Result<()>;
+    fn calc_cum_returns(&mut self) -> Result<()>;
+}
+
+impl StoreCalcs for DataFrame {
+    fn calc_returns(&mut self) -> Result<()> {
+        let close = self.column("close")?.f64()?.clone();
+        let shifted_close = close.shift_and_fill(1, Some(0.0));
+
+        let log_returns = Series::new(
+            "log_returns",
+            (close / shifted_close).apply(|diff| diff.ln()),
+        );
+
+        self.hstack_mut(&[log_returns])?;
+
+        Ok(())
+    }
+
+    fn calc_cum_returns(&mut self) -> Result<()> {
+        let cum_returns = Series::new(
+            "cum_returns",
+            self.column("log_returns")?.f64()?.cumsum(false),
+        );
+
+        self.hstack_mut(&[cum_returns])?;
+
+        Ok(())
     }
 }

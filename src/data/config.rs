@@ -28,6 +28,8 @@ struct RawDataConfig {
     pub download_file_format: String,
     pub date_format_monthly: String,
     pub date_format_daily: String,
+
+    pub default_timeframes: Vec<String>,
 }
 
 impl RawDataConfig {
@@ -50,12 +52,14 @@ pub struct DataConfig {
     pub download_file_format: String,
     pub date_format_monthly: String,
     pub date_format_daily: String,
+
+    pub default_timeframes: Vec<String>,
 }
 
 impl DataConfig {
     pub fn new(asset_cat: AssetCategory) -> DataConfig {
         let rawc = RawDataConfig::new();
-        let (info_uri, klines_uri, hist_monthly_klines_uri, hist_daily_klines_uri) = match asset_cat
+        let (info_uri, klines_uri, hist_klines_monthly_uri, hist_klines_daily_uri) = match asset_cat
         {
             AssetCategory::Spot => (
                 rawc.spot_info_uri,
@@ -80,13 +84,14 @@ impl DataConfig {
         DataConfig {
             base_raw_dir: rawc.base_raw_dir.clone(),
             base_store_dir: rawc.base_store_dir.clone(),
-            info_uri: info_uri.clone(),
-            klines_uri: klines_uri.clone(),
-            hist_klines_monthly_uri: hist_monthly_klines_uri.clone(),
-            hist_klines_daily_uri: hist_daily_klines_uri.clone(),
-            download_file_format: rawc.download_file_format.clone(),
-            date_format_monthly: rawc.date_format_monthly.clone(),
-            date_format_daily: rawc.date_format_daily.clone(),
+            info_uri,
+            klines_uri,
+            hist_klines_monthly_uri,
+            hist_klines_daily_uri,
+            download_file_format: rawc.download_file_format,
+            date_format_monthly: rawc.date_format_monthly,
+            date_format_daily: rawc.date_format_daily,
+            default_timeframes: rawc.default_timeframes,
         }
     }
 }

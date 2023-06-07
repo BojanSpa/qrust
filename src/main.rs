@@ -1,5 +1,6 @@
+#![allow(dead_code)]
+
 use log::LevelFilter as LogLevel;
-use log::{error, info};
 use std::io::{Result, Write};
 
 use chrono::Local as LocalDateTime;
@@ -21,7 +22,7 @@ async fn main() {
 
     let log_handler = LogHandler::new();
     let log_target = fmt::Target::Pipe(Box::new(log_handler));
-    setup_logger(log_target, LogLevel::Info);
+    setup_logger(log_target, LogLevel::Trace);
 
     // all_symbols().await;
     sync_test().await;
@@ -43,6 +44,7 @@ async fn sync_test() {
         name: "BTCUSDT".to_string(),
         initdate: datetime::create_utc(2020, 1, 1),
     }];
+
     let sync_task = tokio::task::spawn_blocking(move || {
         let data_store = DataStore::new_arc(config.clone(), AssetCategory::Usdm);
         data_store.sync(symbols);

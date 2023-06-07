@@ -13,7 +13,7 @@ use serde_json::Value as JsonValue;
 use url;
 
 use crate::data::config::DataConfig;
-use crate::data::sanitizer::CsvSanitizer;
+use crate::data::sanitizer::{CsvSanitizer, DataFrameSanitizer};
 use crate::data::{AssetCategory, Symbol};
 use crate::extensions::datetime;
 
@@ -87,7 +87,8 @@ impl SymbolsProvider {
 pub struct DataProvider {
     config: DataConfig,
     asset_cat: AssetCategory,
-    sanitizer: CsvSanitizer,
+    csv_sanitizer: CsvSanitizer,
+    df_sanitizer: DataFrameSanitizer,
 }
 
 impl DataProvider {
@@ -95,7 +96,8 @@ impl DataProvider {
         DataProvider {
             config,
             asset_cat,
-            sanitizer: CsvSanitizer::new(),
+            csv_sanitizer: CsvSanitizer::new(),
+            df_sanitizer: DataFrameSanitizer::new(),
         }
     }
 
@@ -164,7 +166,7 @@ impl DataProvider {
 
         self.create_zipfile(&zippath, &content)?;
         self.extract_zipfile(&zippath, &basepath)?;
-        self.sanitizer.run(&csvpath)?;
+        self.csv_sanitizer.run(&csvpath)?;
         fs::remove_file(&zippath)?;
 
         info!("Fetched {}", &zipname);
@@ -184,20 +186,20 @@ impl DataProvider {
         Ok(())
     }
 
-    pub fn load_all(&self, symbol: &str) -> Vec<DataFrame> {
-        let mut monthly_dfs = self.load(symbol, &Timeperiod::Monthly);
-        let mut daily_dfs = self.load(symbol, &Timeperiod::Daily);
+    pub fn load_all(&self, symbol: &str) -> Result<Vec<DataFrame>> {
+        let mut monthly_dfs = self.load(symbol, &Timeperiod::Monthly)?;
+        let mut daily_dfs = self.load(symbol, &Timeperiod::Daily)?;
         let mut dfs = Vec::new();
         dfs.append(&mut monthly_dfs);
         dfs.append(&mut daily_dfs);
-        dfs
+        Ok(dfs)
     }
 
-    fn load(&self, symbol: &str, timeperiod: &Timeperiod) -> Vec<DataFrame> {
+    fn load(&self, symbol: &str, timeperiod: &Timeperiod) -> Result<Vec<DataFrame>> {
         let path = self.base_path_for(symbol, timeperiod);
         let entries = match read_dir(path) {
             Ok(files) => files,
-            Err(_) => return Vec::new(),
+            Err(_) => return Ok(vec![]),
         };
 
         let mut dfs = Vec::new();
@@ -207,15 +209,12 @@ impl DataProvider {
                 continue;
             }
 
-            let df = CsvReader::from_path(&path).unwrap().finish();
-            if df.is_err() {
-                error!("Could not load csv file {}", path.to_str().unwrap());
-                return dfs;
-            }
+            let mut df = CsvReader::from_path(&path)?.finish()?;
+            self.df_sanitizer.run(&mut df)?;
 
-            dfs.push(df.unwrap());
+            dfs.push(df);
         }
-        dfs
+        Ok(dfs)
     }
 
     fn base_path_for(&self, symbol: &str, timeperiod: &Timeperiod) -> PathBuf {
