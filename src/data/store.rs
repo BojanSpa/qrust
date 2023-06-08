@@ -4,10 +4,11 @@ use std::sync::Arc;
 
 use anyhow::{anyhow, Result};
 use polars::io::parquet::ParquetReader;
+use polars::lazy::dsl::*;
 use polars::prelude::*;
 use rayon::prelude::*;
 
-use crate::data::Symbol;
+use crate::data::{Column, Symbol};
 use crate::AssetCategory;
 use crate::DataConfig;
 use crate::DataProvider;
@@ -89,11 +90,13 @@ impl DataStore {
             }
             None => {
                 let provider = DataProvider::new(self.config.clone(), self.asset_cat.clone());
-                // provider.sync(&symbol.name, &symbol.initdate)?;
+                provider.sync(&symbol.name, &symbol.initdate)?;
 
-                let store = self.create(&provider, &symbol.name)?;
+                let store = self.create(&provider, &symbol.name)?.lazy();
 
-                // store.unique_stable()
+                for tf in self.config.default_timeframes.iter() {
+                    self.resample(&symbol.name, tf, store.clone())?;
+                }
             }
         }
 
@@ -117,13 +120,64 @@ impl DataStore {
         store.calc_returns()?;
         store.calc_cum_returns()?;
 
-        println!("Rows: {}", store.height());
-
         let store_path = self.store_path_for(symbol, &None);
         let mut store_file = File::create(store_path)?;
         ParquetWriter::new(&mut store_file).finish(&mut store)?;
 
+        log::info!(
+            "Created store for: {} - {}",
+            self.asset_cat.as_str(),
+            symbol
+        );
         Ok(store)
+    }
+
+    fn resample(&self, symbol: &str, timeframe: &str, store: LazyFrame) -> Result<()> {
+        let duration = Duration::parse(timeframe);
+        let offset = Duration::parse("0s");
+        let mut resampled_store = store
+            .sort(Column::OPEN_TIME, SortOptions::default())
+            .groupby_dynamic(
+                col(Column::OPEN_TIME),
+                [],
+                DynamicGroupOptions {
+                    index_column: Column::OPEN_TIME.into(),
+                    every: duration,
+                    period: duration,
+                    offset,
+                    truncate: false,
+                    include_boundaries: false,
+                    closed_window: ClosedWindow::Left,
+                    start_by: Default::default(),
+                    check_sorted: false,
+                },
+            )
+            .agg([
+                col(Column::OPEN).first(),
+                col(Column::HIGH).max(),
+                col(Column::LOW).min(),
+                col(Column::CLOSE).last(),
+                col(Column::VOLUME).sum(),
+                col(Column::QUOTE_VOLUME).sum(),
+                col(Column::COUNT).sum(),
+                col(Column::TAKER_BUY_VOLUME).sum(),
+                col(Column::TAKER_BUY_QUOTE_VOLUME).sum(),
+                col(Column::LOG_RETURNS).sum(),
+                col(Column::CUM_RETURNS).last(),
+            ])
+            .collect()?;
+
+        let store_path = self.store_path_for(symbol, &Some(timeframe.into()));
+        let mut store_file = File::create(store_path)?;
+        ParquetWriter::new(&mut store_file).finish(&mut resampled_store)?;
+
+        log::info!(
+            "Resampled: {} - {} - {}",
+            self.asset_cat.as_str(),
+            symbol,
+            timeframe
+        );
+        Ok(())
     }
 }
 
@@ -134,27 +188,25 @@ trait StoreCalcs {
 
 impl StoreCalcs for DataFrame {
     fn calc_returns(&mut self) -> Result<()> {
-        let close = self.column("close")?.f64()?.clone();
+        let close = self.column(Column::CLOSE)?.f64()?.clone();
         let shifted_close = close.shift_and_fill(1, Some(0.0));
 
         let log_returns = Series::new(
-            "log_returns",
+            Column::LOG_RETURNS,
             (close / shifted_close).apply(|diff| diff.ln()),
         );
 
         self.hstack_mut(&[log_returns])?;
-
         Ok(())
     }
 
     fn calc_cum_returns(&mut self) -> Result<()> {
         let cum_returns = Series::new(
-            "cum_returns",
-            self.column("log_returns")?.f64()?.cumsum(false),
+            Column::CUM_RETURNS,
+            self.column(Column::LOG_RETURNS)?.f64()?.cumsum(false),
         );
 
         self.hstack_mut(&[cum_returns])?;
-
         Ok(())
     }
 }

@@ -18,6 +18,7 @@ polars = { version = "0.30.0", features = [
     "dtype-date",
     "dtype-datetime",
     "dtype-time",
+    "dynamic_groupby",
     "lazy",
     "temporal",
     "rows",

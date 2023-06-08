@@ -75,12 +75,8 @@ impl SymbolsProvider {
                 Utc,
             )
         } else {
-            self.DEFAULT_INITDATE()
+            datetime::create_utc(2017, 1, 1)
         }
-    }
-
-    fn DEFAULT_INITDATE(&self) -> DateTime<Utc> {
-        datetime::create_utc(2017, 1, 1)
     }
 }
 
@@ -149,7 +145,7 @@ impl DataProvider {
             return Ok(());
         }
 
-        let fileuri = self.uri_for(baseuri, symbol, &zipname).to_string();
+        let fileuri = self.uri_for(baseuri, symbol, &zipname)?.to_string();
         let response = reqwest::blocking::get(fileuri).map_err(|e| {
             error!("Could not get content for {}", zipname);
             e
@@ -233,16 +229,13 @@ impl DataProvider {
         }
     }
 
-    fn uri_for(&self, baseuri: &str, symbol: &str, filename: &str) -> url::Url {
+    fn uri_for(&self, baseuri: &str, symbol: &str, filename: &str) -> Result<url::Url> {
         const SLASH: &str = "/";
-        Url::parse(baseuri)
-            .unwrap()
-            .join(&format!("{}{}", symbol, SLASH))
-            .unwrap()
-            .join(&format!("{}{}", DEFAULT_TIMEFRAME, SLASH))
-            .unwrap()
-            .join(filename)
-            .unwrap()
+        let uri = Url::parse(baseuri)?
+            .join(&format!("{}{}", symbol, SLASH))?
+            .join(&format!("{}{}", DEFAULT_TIMEFRAME, SLASH))?
+            .join(filename)?;
+        Ok(uri)
     }
 
     fn date_format_for(&self, timeperiod: &Timeperiod) -> &str {
