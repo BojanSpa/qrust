@@ -9,22 +9,20 @@ use polars::prelude::*;
 use rayon::prelude::*;
 
 use crate::data::{Column, Symbol};
-use crate::AssetCategory;
 use crate::DataConfig;
 use crate::DataProvider;
 
 pub struct DataStore {
     config: DataConfig,
-    asset_cat: AssetCategory,
 }
 
 impl DataStore {
-    pub fn new(config: DataConfig, asset_cat: AssetCategory) -> DataStore {
-        DataStore { config, asset_cat }
+    pub fn new(config: DataConfig) -> DataStore {
+        DataStore { config }
     }
 
     // TODO: Date range
-    pub fn load(&self, symbol: &str, timeframe: &Option<String>) -> Option<DataFrame> {
+    pub fn load(&self, symbol: &str, timeframe: &Option<&str>) -> Option<DataFrame> {
         let store_path = self.store_path_for(symbol, timeframe);
         if !store_path.exists() {
             log::warn!("Store file not found: {:?}", store_path);
@@ -36,11 +34,11 @@ impl DataStore {
         Some(df)
     }
 
-    fn store_path_for(&self, symbol: &str, timeframe: &Option<String>) -> PathBuf {
+    fn store_path_for(&self, symbol: &str, timeframe: &Option<&str>) -> PathBuf {
         let store_name = self.store_name_for(symbol, timeframe);
         let mut store_path = PathBuf::new();
         store_path.push(&self.config.base_store_dir);
-        store_path.push(self.asset_cat.as_str());
+        store_path.push(self.config.asset_cat.as_str());
         store_path.push(symbol);
 
         if !store_path.exists() {
@@ -51,7 +49,7 @@ impl DataStore {
         store_path
     }
 
-    fn store_name_for(&self, symbol: &str, timeframe: &Option<String>) -> String {
+    fn store_name_for(&self, symbol: &str, timeframe: &Option<&str>) -> String {
         let tf = match timeframe {
             Some(tf) => format!("-{}", tf),
             None => String::new(),
@@ -61,8 +59,8 @@ impl DataStore {
 }
 
 impl DataStore {
-    pub fn new_arc(config: DataConfig, asset_cat: AssetCategory) -> Arc<Self> {
-        Arc::new(DataStore::new(config, asset_cat))
+    pub fn new_arc(config: DataConfig) -> Arc<Self> {
+        Arc::new(DataStore::new(config))
     }
 
     pub fn sync(self: Arc<Self>, mut symbols: Vec<Symbol>) {
@@ -92,7 +90,8 @@ impl DataStore {
                 // println!("{}", store);
             }
             None => {
-                let provider = DataProvider::new(self.config.clone(), self.asset_cat.clone());
+                let provider =
+                    DataProvider::new(self.config.clone(), self.config.asset_cat.clone());
                 provider.sync(&symbol.name, &symbol.initdate)?;
 
                 let store = self.create(&provider, &symbol.name)?.lazy();
@@ -131,7 +130,7 @@ impl DataStore {
 
         log::info!(
             "Created store for: {} - {}",
-            self.asset_cat.as_str(),
+            self.config.asset_cat.as_str(),
             symbol
         );
         Ok(store)
@@ -178,7 +177,7 @@ impl DataStore {
 
         log::info!(
             "Resampled: {} - {} - {}",
-            self.asset_cat.as_str(),
+            self.config.asset_cat.as_str(),
             symbol,
             timeframe
         );

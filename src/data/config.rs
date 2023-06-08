@@ -41,6 +41,8 @@ impl RawDataConfig {
 
 #[derive(Clone)]
 pub struct DataConfig {
+    pub asset_cat: AssetCategory,
+
     pub base_raw_dir: String,
     pub base_store_dir: String,
 
@@ -82,6 +84,7 @@ impl DataConfig {
         };
 
         DataConfig {
+            asset_cat,
             base_raw_dir: rawc.base_raw_dir.clone(),
             base_store_dir: rawc.base_store_dir.clone(),
             info_uri,

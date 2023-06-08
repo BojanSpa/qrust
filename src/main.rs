@@ -11,9 +11,12 @@ use data::config::DataConfig;
 use data::provider::{DataProvider, SymbolsProvider};
 use data::store::DataStore;
 use data::{AssetCategory, Symbol};
+use event::handler::EventHandler;
+use event::sources::StoreEventSource;
 use extensions::datetime;
 
 mod data;
+mod event;
 mod extensions;
 
 #[tokio::main]
@@ -25,7 +28,8 @@ async fn main() {
     setup_logger(log_target, LogLevel::Info);
 
     // all_symbols().await;
-    sync_test().await;
+    // sync_test().await;
+    event_test();
 }
 
 async fn all_symbols() {
@@ -46,24 +50,19 @@ async fn sync_test() {
     }];
 
     let sync_task = tokio::task::spawn_blocking(move || {
-        let data_store = DataStore::new_arc(config.clone(), AssetCategory::Usdm);
+        let data_store = DataStore::new_arc(config);
         data_store.sync(symbols);
     });
 
     sync_task.await.unwrap();
 }
 
-// async fn sync_test() {
-//     let config = DataConfig::new();
-//     let provider = DataProvider::new(config, AssetCategory::Usdm);
-//     let sync_result = provider
-//         .sync("BNBBUSD", &datetime::create_utc(2020, 1, 1))
-//         .await;
-//     match sync_result {
-//         Ok(_) => info!("Sync completed successfully"),
-//         Err(e) => error!("Sync failed: {}", e),
-//     }
-// }
+fn event_test() {
+    let config = DataConfig::new(AssetCategory::Usdm);
+    let source = StoreEventSource::new(config, "BTCUSDT", Some("4h"));
+    let handler = EventHandler::new(Box::new(source));
+    handler.start(10).unwrap();
+}
 
 fn setup_logger(target: LogTarget, level: LogLevel) {
     LogBuilder::new()
