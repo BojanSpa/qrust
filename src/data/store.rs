@@ -86,7 +86,10 @@ impl DataStore {
         match store {
             Some(store) => {
                 // TODO: Check if df is up to date
-                print!("{}", store.sample_n(50, false, false, None).unwrap());
+                // println!("{}", store.sample_n(50, false, false, None).unwrap());
+
+                println!("{}", store.sort([Column::OPEN_TIME], false)?);
+                // println!("{}", store);
             }
             None => {
                 let provider = DataProvider::new(self.config.clone(), self.asset_cat.clone());
@@ -117,7 +120,9 @@ impl DataStore {
         // TODO: Check for gaps in data
         // Sometimes monthly data has daily gaps, so we need to fill them from daily data
 
-        store.calc_returns()?;
+        store = store.drop_nulls::<String>(None)?;
+
+        store.calc_log_returns()?;
         store.calc_cum_returns()?;
 
         let store_path = self.store_path_for(symbol, &None);
@@ -182,14 +187,14 @@ impl DataStore {
 }
 
 trait StoreCalcs {
-    fn calc_returns(&mut self) -> Result<()>;
+    fn calc_log_returns(&mut self) -> Result<()>;
     fn calc_cum_returns(&mut self) -> Result<()>;
 }
 
 impl StoreCalcs for DataFrame {
-    fn calc_returns(&mut self) -> Result<()> {
+    fn calc_log_returns(&mut self) -> Result<()> {
         let close = self.column(Column::CLOSE)?.f64()?.clone();
-        let shifted_close = close.shift_and_fill(1, Some(0.0));
+        let shifted_close = close.shift_and_fill(1, Some(1.0));
 
         let log_returns = Series::new(
             Column::LOG_RETURNS,
@@ -203,10 +208,50 @@ impl StoreCalcs for DataFrame {
     fn calc_cum_returns(&mut self) -> Result<()> {
         let cum_returns = Series::new(
             Column::CUM_RETURNS,
-            self.column(Column::LOG_RETURNS)?.f64()?.cumsum(false),
+            self.column(Column::LOG_RETURNS)?.cumsum(false),
         );
 
         self.hstack_mut(&[cum_returns])?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calc_log_returns() {
+        let mut df = df!(
+            Column::CLOSE => &[1.0, 2.0, 1.5, 3.5, 1.5]
+        )
+        .unwrap();
+
+        df.calc_log_returns().unwrap();
+        df.calc_cum_returns().unwrap();
+
+        println!("{}", df);
+    }
+
+    #[test]
+    fn test_calc_cum_returns() {
+        let mut df = df!(
+            Column::LOG_RETURNS => &[-1.0, 2.0, -3.0, 4.0, -5.0]
+        )
+        .unwrap();
+
+        df.calc_cum_returns().unwrap();
+
+        let expected_cum_returns = Series::new(Column::CUM_RETURNS, &[-1.0, 1.0, -2.0, 2.0, -3.0]);
+
+        let x = df
+            .column(Column::CUM_RETURNS)
+            .unwrap()
+            .iter()
+            .zip(expected_cum_returns.iter());
+
+        for (a, b) in x {
+            assert_eq!(a, b);
+        }
     }
 }
