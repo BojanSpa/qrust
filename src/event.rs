@@ -1,13 +1,13 @@
 pub mod handler;
 pub mod sources;
 
-use polars::lazy::prelude::*;
+use polars::prelude::*;
 
 pub struct DataEvent {
-    pub data: LazyFrame,
+    pub data: DataFrame,
 }
 impl DataEvent {
-    pub fn new(data: LazyFrame) -> Self {
+    pub fn new(data: DataFrame) -> Self {
         Self { data }
     }
 }

@@ -1,13 +1,12 @@
 use anyhow::{anyhow, Result};
-use polars::lazy::prelude::*;
 
 use crate::data::config::DataConfig;
 use crate::data::store::DataStore;
-use crate::event::handler::HandlesData;
+use crate::event::handler::EventHandler;
 use crate::event::DataEvent;
 
 pub trait EventSource {
-    fn start(&self, handler: &dyn HandlesData, lookback: usize) -> Result<()>;
+    fn start(&self, handler: &EventHandler, lookback: usize) -> Result<()>;
 }
 
 pub struct StoreEventSource<'a> {
@@ -27,7 +26,7 @@ impl<'a> StoreEventSource<'a> {
 }
 
 impl<'a> EventSource for StoreEventSource<'a> {
-    fn start(&self, handler: &dyn HandlesData, lookback: usize) -> Result<()> {
+    fn start(&self, handler: &EventHandler, lookback: usize) -> Result<()> {
         let data = self
             .store
             .load(self.symbol, &self.timeframe)
@@ -39,7 +38,7 @@ impl<'a> EventSource for StoreEventSource<'a> {
             }
 
             let offset = (i - lookback) as i64;
-            let event = DataEvent::new(data.slice(offset, lookback).lazy());
+            let event = DataEvent::new(data.slice(offset, lookback));
             handler.on_data(event);
         }
 
@@ -59,7 +58,7 @@ impl<'a> ExchangeEventSource<'a> {
 }
 
 impl EventSource for ExchangeEventSource<'_> {
-    fn start(&self, _handler: &dyn HandlesData, _lookback: usize) -> Result<()> {
+    fn start(&self, _handler: &EventHandler, _lookback: usize) -> Result<()> {
         todo!()
     }
 }

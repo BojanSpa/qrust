@@ -14,10 +14,13 @@ use data::{AssetCategory, Symbol};
 use event::handler::EventHandler;
 use event::sources::StoreEventSource;
 use extensions::datetime;
+use strats::EmaCrossStrat;
 
 mod data;
 mod event;
 mod extensions;
+mod strats;
+mod ta;
 
 #[tokio::main]
 async fn main() {
@@ -59,9 +62,10 @@ async fn sync_test() {
 
 fn event_test() {
     let config = DataConfig::new(AssetCategory::Usdm);
-    let source = StoreEventSource::new(config, "BTCUSDT", Some("4h"));
-    let handler = EventHandler::new(Box::new(source));
-    handler.start(10).unwrap();
+    let source = StoreEventSource::new(config, "BTCUSDT", Some("5m"));
+    let strat = EmaCrossStrat::new(10, 20);
+    let handler = EventHandler::new(Box::new(source), Box::new(strat));
+    handler.start(100).unwrap();
 }
 
 fn setup_logger(target: LogTarget, level: LogLevel) {

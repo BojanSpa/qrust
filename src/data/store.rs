@@ -171,7 +171,7 @@ impl DataStore {
             ])
             .collect()?;
 
-        let store_path = self.store_path_for(symbol, &Some(timeframe.into()));
+        let store_path = self.store_path_for(symbol, &Some(timeframe));
         let mut store_file = File::create(store_path)?;
         ParquetWriter::new(&mut store_file).finish(&mut resampled_store)?;
 
