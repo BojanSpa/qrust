@@ -5,5 +5,9 @@
   "lldb.showDisassembly": "never",
   "lldb.dereferencePointers": true,
   "lldb.consoleMode": "commands",
-  "rust-analyzer.showUnlinkedFileNotification": false
+  "rust-analyzer.showUnlinkedFileNotification": false,
+
+  "extensions.experimental.affinity": {
+    "asvetliakov.vscode-neovim": 1
+  }
 }

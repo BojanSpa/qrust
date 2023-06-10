@@ -13,7 +13,9 @@ pub enum Signal {
     Hold,
 }
 
-pub trait Strat {}
+pub trait Strat {
+    fn get_threshold(&self) -> usize;
+}
 
 pub trait EventStrat {
     fn run(&self, data: DataFrame) -> Signal;
@@ -37,6 +39,12 @@ impl EmaCrossStrat {
             ema_slow,
             threshold: slow,
         }
+    }
+}
+
+impl Strat for EmaCrossStrat {
+    fn get_threshold(&self) -> usize {
+        self.threshold
     }
 }
 

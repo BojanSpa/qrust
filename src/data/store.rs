@@ -22,7 +22,7 @@ impl DataStore {
     }
 
     // TODO: Date range
-    pub fn load(&self, symbol: &str, timeframe: &Option<&str>) -> Option<DataFrame> {
+    pub fn load(&self, symbol: &str, timeframe: &Option<String>) -> Option<DataFrame> {
         let store_path = self.store_path_for(symbol, timeframe);
         if !store_path.exists() {
             log::warn!("Store file not found: {:?}", store_path);
@@ -34,7 +34,7 @@ impl DataStore {
         Some(df)
     }
 
-    fn store_path_for(&self, symbol: &str, timeframe: &Option<&str>) -> PathBuf {
+    fn store_path_for(&self, symbol: &str, timeframe: &Option<String>) -> PathBuf {
         let store_name = self.store_name_for(symbol, timeframe);
         let mut store_path = PathBuf::new();
         store_path.push(&self.config.base_store_dir);
@@ -49,7 +49,7 @@ impl DataStore {
         store_path
     }
 
-    fn store_name_for(&self, symbol: &str, timeframe: &Option<&str>) -> String {
+    fn store_name_for(&self, symbol: &str, timeframe: &Option<String>) -> String {
         let tf = match timeframe {
             Some(tf) => format!("-{}", tf),
             None => String::new(),
@@ -171,7 +171,7 @@ impl DataStore {
             ])
             .collect()?;
 
-        let store_path = self.store_path_for(symbol, &Some(timeframe));
+        let store_path = self.store_path_for(symbol, &Some(timeframe.to_string()));
         let mut store_file = File::create(store_path)?;
         ParquetWriter::new(&mut store_file).finish(&mut resampled_store)?;
 

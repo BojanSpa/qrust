@@ -3,6 +3,7 @@ pub mod sources;
 
 use polars::prelude::*;
 
+#[derive(Debug)]
 pub struct DataEvent {
     pub data: DataFrame,
 }
