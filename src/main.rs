@@ -15,12 +15,11 @@ use data::{AssetCategory, Symbol};
 use event::handler::EventHandler;
 use event::sources::{EventSource, EventSourceOptions, StoreEventSource};
 use extensions::datetime;
-use strats::{EmaCrossStrat, Strat};
 
 mod data;
 mod event;
 mod extensions;
-mod strats;
+mod signals;
 mod ta;
 
 const DEFAULT_CHANNEL_SIZE: usize = 100;
@@ -35,7 +34,7 @@ async fn main() {
 
     // all_symbols().await;
     // sync_test().await;
-    event_test().await;
+    // event_test().await;
 }
 
 async fn all_symbols() {
@@ -63,30 +62,30 @@ async fn sync_test() {
     sync_task.await.unwrap();
 }
 
-async fn event_test() {
-    let symbol = "BTCUSDT".to_string();
-    let timeframe = Some("5m".to_string());
+// async fn event_test() {
+//     let symbol = "BTCUSDT".to_string();
+//     let timeframe = Some("5m".to_string());
 
-    let (sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
+//     let (sender, receiver) = mpsc::channel(DEFAULT_CHANNEL_SIZE);
 
-    let config = DataConfig::new(AssetCategory::Usdm);
-    let options = EventSourceOptions { symbol, timeframe };
+//     let config = DataConfig::new(AssetCategory::Usdm);
+//     let options = EventSourceOptions { symbol, timeframe };
 
-    let source = StoreEventSource::new(config, options, sender.clone());
+//     let source = StoreEventSource::new(config, options, sender.clone());
 
-    let strat = EmaCrossStrat::new(10, 20);
-    let lookback = strat.get_threshold() * 5;
-    let mut handler = EventHandler::new(strat, receiver);
+//     let strat = EmaCrossStrat::new(10, 20);
+//     let lookback = strat.get_threshold() * 5;
+//     let mut handler = EventHandler::new(strat, receiver);
 
-    tokio::spawn(async move {
-        match source.start(lookback).await {
-            Ok(_) => println!("Done"),
-            Err(e) => log::error!("Error: {}", e),
-        }
-    });
+//     tokio::spawn(async move {
+//         match source.start(lookback).await {
+//             Ok(_) => println!("Done"),
+//             Err(e) => log::error!("Error: {}", e),
+//         }
+//     });
 
-    handler.listen().await;
-}
+//     handler.listen().await;
+// }
 
 fn setup_logger(target: LogTarget, level: LogLevel) {
     LogBuilder::new()

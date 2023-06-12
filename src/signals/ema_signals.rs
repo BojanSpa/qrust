@@ -1,59 +1,29 @@
 use std::cell::RefCell;
 
-use polars::prelude::*;
+use polars::prelude::DataFrame;
 use ta::indicators::ExponentialMovingAverage as Ema;
+use ta::Period;
 
 use crate::data::Column;
+use crate::signals::{Signal, SignalProcessor};
 use crate::ta::Last;
 
-#[derive(Debug)]
-pub enum Signal {
-    Buy,
-    Sell,
-    Hold,
-}
-
-pub trait Strat {
-    fn get_threshold(&self) -> usize;
-}
-
-pub trait EventStrat {
-    fn run(&self, data: DataFrame) -> Signal;
-}
-
-pub trait VectorStrat {}
-
-pub struct EmaCrossStrat {
+pub struct EmaCrossSignal {
     ema_fast: RefCell<Ema>,
     ema_slow: RefCell<Ema>,
-    threshold: usize,
 }
 
-impl EmaCrossStrat {
+impl EmaCrossSignal {
     pub fn new(fast: usize, slow: usize) -> Self {
         let ema_fast = RefCell::new(Ema::new(fast).unwrap());
         let ema_slow = RefCell::new(Ema::new(slow).unwrap());
 
-        Self {
-            ema_fast,
-            ema_slow,
-            threshold: slow,
-        }
+        Self { ema_fast, ema_slow }
     }
 }
 
-impl Strat for EmaCrossStrat {
-    fn get_threshold(&self) -> usize {
-        self.threshold
-    }
-}
-
-impl EventStrat for EmaCrossStrat {
-    fn run(&self, data: DataFrame) -> Signal {
-        if data.height() < self.threshold {
-            return Signal::Hold;
-        }
-
+impl SignalProcessor for EmaCrossSignal {
+    fn proc(&self, data: &DataFrame) -> Signal {
         let close = data.column(Column::CLOSE).unwrap().f64().unwrap();
         let fast = self.ema_fast.borrow_mut().last(close);
         let slow = self.ema_slow.borrow_mut().last(close);
@@ -67,5 +37,9 @@ impl EventStrat for EmaCrossStrat {
         }
 
         Signal::Hold
+    }
+
+    fn get_threshold(&self) -> usize {
+        self.ema_slow.borrow().period()
     }
 }
