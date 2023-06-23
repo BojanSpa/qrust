@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 pub mod config;
 pub mod provider;
 pub mod sanitizer;
+pub mod sources;
 pub mod store;
 
 #[derive(Clone)]

@@ -4,7 +4,7 @@ use tokio::sync::mpsc;
 
 use crate::data::config::DataConfig;
 use crate::data::store::DataStore;
-use crate::event::DataEvent;
+use crate::events::Event;
 
 #[async_trait]
 pub trait EventSource {
@@ -19,14 +19,14 @@ pub struct EventSourceOptions {
 pub struct StoreEventSource {
     store: DataStore,
     options: EventSourceOptions,
-    sender: mpsc::Sender<Option<DataEvent>>,
+    sender: mpsc::Sender<Event>,
 }
 
 impl StoreEventSource {
     pub fn new(
         config: DataConfig,
         options: EventSourceOptions,
-        sender: mpsc::Sender<Option<DataEvent>>,
+        sender: mpsc::Sender<Event>,
     ) -> Self {
         Self {
             store: DataStore::new(config),
@@ -53,11 +53,11 @@ impl EventSource for StoreEventSource {
             }
 
             let offset = (i - lookback) as i64;
-            let event = DataEvent::new(data.slice(offset, lookback));
-            self.sender.send(Some(event)).await?;
+            let event = Event::Data(data.slice(offset, lookback));
+            self.sender.send(event).await?;
         }
 
-        self.sender.send(None).await?;
+        self.sender.send(Event::Stop).await?;
 
         Ok(())
     }

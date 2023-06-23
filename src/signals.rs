@@ -9,7 +9,7 @@ pub enum Signal {
     Hold,
 }
 
-pub trait SignalProcessor {
-    fn proc(&self, data: &DataFrame) -> Signal;
+pub trait SignalGenerator {
+    fn process(&self, data: DataFrame) -> Signal;
     fn get_threshold(&self) -> usize;
 }
